@@ -500,7 +500,7 @@ class TestPartialLoadsPartialLoadJob(unittestcore.BaseUnitTest):
 
         data_expected = {
             'id': ['001', '002', '003', '004'],
-            'name': ["UPDATED", "UPDATED", "UPDATED", "INSERTED"]
+            'name': ["LOAD_1", "LOAD_1", "LOAD_1", "INSERTED"]
         }
 
         # creating a Dataframe object
@@ -508,7 +508,7 @@ class TestPartialLoadsPartialLoadJob(unittestcore.BaseUnitTest):
 
         assert df_expected.equals(df_actual)
 
-    def test_simple_stream_load_incremental_error_expected(self):
+    def test_simple_stream_load_incremental_appending_dupes(self):
 
         from target_bigquery import main
 
@@ -527,7 +527,38 @@ class TestPartialLoadsPartialLoadJob(unittestcore.BaseUnitTest):
 
         ret = main()
 
-        # LOAD 2: data has dupes, which cause MERGE query to break
+        # verify data
+
+        config_file = os.path.join(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'sandbox'),
+            'target-config.json')
+
+        config = json.load(open(config_file))
+        project_id = config["project_id"]
+        dataset_id = config["dataset_id"]
+        stream = "simple_stream"
+
+        bq_client = Client(project=project_id)
+
+        query_string = f"SELECT id, name FROM `{project_id}.{dataset_id}.{stream}` ORDER BY 1, 2"
+
+        df_actual = (
+            bq_client.query(query_string)
+            .result()
+            .to_dataframe()
+        )
+
+        data_expected = {
+            'id': ['001', '002', '003'],
+            'name': ["LOAD_1", "LOAD_1", "LOAD_1"]
+        }
+
+        # creating a Dataframe object
+        df_expected = pd.DataFrame(data_expected)
+
+        assert df_expected.equals(df_actual)
+
+        # LOAD 2: data has dupes, which does not cause MERGE query to break, because we only do INSERT, not UPDATE
         # Load new data with MERGE statement
         self.set_cli_args(
             stdin=os.path.join(os.path.join(
@@ -540,13 +571,33 @@ class TestPartialLoadsPartialLoadJob(unittestcore.BaseUnitTest):
             processhandler="partial-load-job",
             ds_delete=False
         )
-        # with pytest.raises(ValueError, match="JSON schema is invalid/incomplete. It has empty properties"):
         ret = main()
 
-        # destination table can have dupe ids used in MERGE statement
-        # new data which being appended should have no dupes
+        # verify data
 
-        # if new data has dupes, then MERGE will fail with a similar error:
+        query_string = f"SELECT id, name FROM `{project_id}.{dataset_id}.{stream}` ORDER BY 1, 2"
+
+        df_actual = (
+            bq_client.query(query_string)
+            .result()
+            .to_dataframe()
+        )
+
+        data_expected = {
+            'id': ['001', '002', '003', '010', '010'],
+            'name': ["LOAD_1", "LOAD_1", "LOAD_1", "DUPE", "DUPE"]
+        }
+
+        # creating a Dataframe object
+        df_expected = pd.DataFrame(data_expected)
+
+        assert df_expected.equals(df_actual)
+
+        # destination table can have dupe ids used in MERGE statement
+        # new data which being appended should have no dupes, if we UPDATE values
+        # new data can have dupes, if we INSERT values
+
+        # if new data has dupes if we UPDATE values, then MERGE will fail with a similar error:
         # INFO Primary keys: id
         # CRITICAL 400 UPDATE/MERGE must match at most one source row for each target row
 
@@ -556,7 +607,7 @@ class TestPartialLoadsPartialLoadJob(unittestcore.BaseUnitTest):
         # If a row in the table to be updated joins with more than one row from the FROM clause,
         # then the query generates the following runtime error: UPDATE/MERGE must match at most one source row for each target row.
 
-        self.assertEqual(ret, 2, msg="Exit code is not 2!")  # expected exit code is 2 - serious problem
+        self.assertEqual(ret, 0, msg="Exit code is not 0!")
 
 
 class TestPartialLoadsBookmarksPartialLoadJob(unittestcore.BaseUnitTest):

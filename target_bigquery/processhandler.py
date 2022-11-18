@@ -275,8 +275,6 @@ class LoadJobProcessHandler(BaseProcessHandler):
                         query ="""MERGE `{table}` t
                             USING `{temp_table}` s
                             ON {primary_key_condition}
-                            WHEN MATCHED THEN
-                                UPDATE SET {set_values}
                             WHEN NOT MATCHED THEN
                                 INSERT ({new_cols}) VALUES ({cols})
                             """.format(table=table_id,
