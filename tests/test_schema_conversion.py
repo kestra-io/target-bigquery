@@ -258,7 +258,10 @@ class TestSchemaConversion(unittestcore.BaseUnitTest):
             },
             "members": {
                 "type": "array"  # shorted array definition, by default we treat this as array of strings
-            }
+            },
+            "profile": {
+                "type": "null"
+            },
           }
         }
 
