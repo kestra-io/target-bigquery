@@ -379,6 +379,11 @@ class LoadJobProcessHandler(BaseProcessHandler):
             logger.info(f"Appending to {table_name}")
             load_config.write_disposition = WriteDisposition.WRITE_APPEND
 
+        # allow addition of new fields
+        load_config.schema_update_options = [
+            bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION
+        ]
+
         logger.info("loading {} to BigQuery".format(table_name))
 
         load_job = None
